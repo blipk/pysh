@@ -10,29 +10,44 @@ PYSH_READ = f'""{PYSH_LINE}'
 PYSH_EXLINE = PYSH_LINE + "$"
 PYSH_EXREAD = PYSH_READ + "$"
 
+
 class BashBlock(ScriptRun):
-    def __init__(self, lines, position, blockindex, pysh, shell="bash"):
+    def __init__(self, lines, blockindex, position, srcfscript, pysh, shell="bash"):
         self.pysh = pysh
+        self.srcf = srcfscript
+        self.lines = lines
         self.srcs = "\n".join(lines)
+        super().__init__(srcs=self.srcs)
         self.blockindex = blockindex
         self.position = position
-        self.lines = lines
 
     @property
     def linecount(self):
         return len(self.lines)
 
-    def wrap(self):
-        self.run()
-        return self.stdout
-
     def runp(self):
         sname = os.path.basename(self.pysh.srcf)
         stdout = self.wrap().decode("UTF-8").strip()
         print(f"[root@pysh {sname} {self.blockindex}]$ {stdout}")
+        return self
 
-    def wrap_text(self):
-        return "self.run()"
+    # Python shell only functions - for pysh autoembed
+    def wrap(self):
+        # generate a function and inject into source before shyp()
+        wrapper = BashBlock(**self)
+        wrapper.wrapped()
+        self.run()
+        return self.returncode
+
+    def wrap_imports(self):
+        # import trimmed pysh
+        pass
+
+    def wrapped(self, srcs = None):
+        # the generated code
+        srcs = srcs or self.srcs
+        srcsw = ""
+        return srcsw
 
     def __repr__(self) -> str:
         classname = self.__class__.__name__
@@ -42,26 +57,41 @@ class BashBlock(ScriptRun):
 
 
 class Pysh():
-    def __init__(self, srfs=__file__) -> None:
+    def __init__(self, srcf=__file__) -> None:
         """
         """
-        self.srcf = os.path.realpath(srfs)
+        self.srcf = os.path.realpath(srcf)
         self.srcs = self.readsrc()
         self.srclines = self.srcs.split("\n")
-        self.cursor = 0
+        self.blocks = []
+        # self.cursor = 0
+
+    def updatesrc(self, srcf):
+        self.srcf = srcf
+        self.srcs = self.readsrc()
+        self.srclines = self.srcs.split("\n")
         self.blocks = []
 
-    def pysh(self):
+    def pysh(self, srcf=None):
+        srcf = srcf or self.srcf
+
         blocks = self.findblocks()
         ret = self.shyp()
+        return self
 
     def shyp(self, blocks=None):
         blocks = blocks or self.blocks
-        output = self.srcs
+        #TODO index and replace all pysh() calls for nonblocking
 
-        # replace blocks with their function wrapper and run pysrc
-        pyshed = BashBlock(output, (0, -1), "python", pysh=self)
-        pyshed.wrap()
+        # Run this script with the wrapped pysh calls and then exit
+        pyshed = BashBlock(self.srcs,
+                           0,
+                           (0, -1),
+                           self.srcf,
+                           shell="python",
+                           pysh=self)
+
+        # pyshed.wrapped()
         sys.exit(pyshed.returncode)
 
     def ispyshc(self, line):
@@ -90,33 +120,35 @@ class Pysh():
 
         block_i = 0
         blocks_raw = []
-        block_lines_b = ""
+        block_t = ""
         block_line_c = 0
         block_start_i = None
         for i, line in enumerate(srclines):
             if not self.ispyshc(line):
                 continue
             line = self.fline(line)
-            if block_lines_b == "":
+            if block_t == "":
                 block_line_c = 0
                 block_start_i = i
                 # assert self.isreadblock(line), f"Fail: {line}"
             else:
                 if self.isexternal(line):
                     assert block_line_c == 0
-            block_lines_b += line
+            block_t += line
             if i+1 == len(srclines) or not self.ispyshc(srclines[i + 1]):
                 block_end_i = i
-                # block_lines_b = block_lines_b.strip()
+                # block_t = block_t.strip()
                 block_position = (block_start_i, block_end_i)
-                blocks_raw.append((block_lines_b, block_position, block_i))
-                block_lines_b = ""
+                blocks_raw.append((block_t, block_i, block_position))
+                block_t = ""
                 block_line_c = 0
                 block_i += 1
             block_line_c += 1
 
-        self.blocks = [BashBlock(block, position, blockindex, pysh=self)
-                       for (block, position, blockindex) in blocks_raw]
+        self.blocks = [BashBlock(block_t, blockindex, position,
+                                 self.srcf,
+                                 pysh=self)
+                       for (block_t, blockindex, position) in blocks_raw]
         return self.blocks
 
     def readsrc(self, srcf=None):
@@ -127,11 +159,6 @@ class Pysh():
         return srcs
 
 
-# Function wrapper so __file__ is in caller context
-def auto_pysh():
-    pysher = Pysh()
-    pysher.pysh()
-    return pysher
-
-
-pysh = auto_pysh
+# Function wrapper to run on call source
+pysher = Pysh()
+pysh = pysher.pysh
