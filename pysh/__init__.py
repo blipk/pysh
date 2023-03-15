@@ -2,8 +2,9 @@
 import os
 import re
 import sys
+import msgpack
 from ast import literal_eval
-from .shrunner import run_script, ScriptRun, ScriptException
+from .pype import run_script, ScriptRun, ScriptException
 
 PYSH_LINE = "#$"
 PYSH_READ = f'""{PYSH_LINE}'
@@ -12,7 +13,13 @@ PYSH_EXREAD = PYSH_READ + "$"
 
 
 class BashBlock(ScriptRun):
-    def __init__(self, lines, blockindex, position, srcfscript, pysh, shell="bash"):
+    def __init__(self, lines,
+                 blockindex,
+                 position,
+                 srcfscript,
+                 pysh,
+                 shell="bash",
+                 serialized=False):
         self.pysh = pysh
         self.srcf = srcfscript
         self.lines = lines
@@ -31,23 +38,17 @@ class BashBlock(ScriptRun):
         print(f"[root@pysh {sname} {self.blockindex}]$ {stdout}")
         return self
 
-    # Python shell only functions - for pysh autoembed
-    def wrap(self):
-        # generate a function and inject into source before shyp()
-        wrapper = BashBlock(**self)
-        wrapper.wrapped()
+    def runs(self):
         self.run()
-        return self.returncode
+        return self.stdout
 
-    def wrap_imports(self):
-        # import trimmed pysh
-        pass
-
-    def wrapped(self, srcs = None):
-        # the generated code
-        srcs = srcs or self.srcs
-        srcsw = ""
-        return srcsw
+    def serialized(self):
+        props = {k: v for k, v in self.__dict__
+                 if k not in ("pysh", "serialized")}
+        props = props | {"serialized": True}
+        serialized = BashBlock(**props)
+        serialized = msgpack.dumps(serialized)
+        return serialized
 
     def __repr__(self) -> str:
         classname = self.__class__.__name__
@@ -64,7 +65,14 @@ class Pysh():
         self.srcs = self.readsrc()
         self.srclines = self.srcs.split("\n")
         self.blocks = []
-        # self.cursor = 0
+        # self.cursor = 0 # TODO
+
+    def readsrc(self, srcf=None):
+        srcs = None
+        srcf = srcf or self.srcf
+        with open(srcf, "r") as f:
+            srcs = f.read()
+        return srcs
 
     def updatesrc(self, srcf):
         self.srcf = srcf
@@ -72,27 +80,55 @@ class Pysh():
         self.srclines = self.srcs.split("\n")
         self.blocks = []
 
-    def pysh(self, srcf=None):
+    def pysh(self, srcf=None, exits=True):
         srcf = srcf or self.srcf
-
         blocks = self.findblocks()
-        ret = self.shyp()
+        ret = self.shyp(exits)
         return self
 
-    def shyp(self, blocks=None):
-        blocks = blocks or self.blocks
-        #TODO index and replace all pysh() calls for nonblocking
+    # This is for .py srcscripts only
+    def wrap_imports(self):
+        # import trimmed pysh
+        # inject blocks (serialize to with tmpfile and msgpack)
 
+        all_blocks = r"(?P<block>\#.*(\n\s*\#.*)*)"
+        # pysh_blocks = r"(?P<block>[^\#]\#\$.*)"
+        # pysh_comments = r"(?P<block>\#\#\$.*)"
+        # pysh_extern = r""
+
+        match = re.findall(all_blocks, self.srcf)
+        # generate a function wrapper for each block and place at its position
+        # ? id the blocks
+        # ? string replace with id marker? that references self.blocks.keyed()
+        # self.blocks[id].runs() # use BlockWrapper.get(id).run() instead?
+
+        # TODO index and replace all pysh() calls for nonblocking
+        pass
+
+    def wrapped(self, srcs=None):
+        srcs = srcs or self.srcs
+        srcsw = self.wrap_imports(srcs)
+        return srcsw
+
+    def shyp(self, blocks=None, exits=True):
+        blocks = blocks or self.blocks
         # Run this script with the wrapped pysh calls and then exit
-        pyshed = BashBlock(self.srcs,
+        pyshed = BashBlock(self.wrapped(),
                            0,
                            (0, -1),
                            self.srcf,
                            shell="python",
                            pysh=self)
+        pyshed.run()
+        if exits:
+            sys.exit(pyshed.returncode)
 
-        # pyshed.wrapped()
-        sys.exit(pyshed.returncode)
+    def blockinfo(self, blocks: list[BashBlock] = None):
+        blocks = blocks or self.blocks
+        block_info = [
+            {block.srcs: ""}
+            for block in blocks
+        ]
 
     def ispyshc(self, line):
         return (self.isreadblock(line)
@@ -150,13 +186,6 @@ class Pysh():
                                  pysh=self)
                        for (block_t, blockindex, position) in blocks_raw]
         return self.blocks
-
-    def readsrc(self, srcf=None):
-        srcs = None
-        srcf = srcf or self.srcf
-        with open(srcf, "r") as f:
-            srcs = f.read()
-        return srcs
 
 
 # Function wrapper to run on call source

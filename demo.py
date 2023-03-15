@@ -6,20 +6,6 @@ from pysh import pysh
 pysh(__file__)
 #$ echo "Pysh activated"
 
-# run pysh manually
-from pysh import Pysh
-source_file = __file__
-p = Pysh(source_file)
-blocks = p.findblocks()
-
-# Run all blocks and print their stdout
-run_blocks = [block.runp() for block in blocks]
-# Run a a single block and silently
-blocks[0].run()
-
-# Start the python interpreter with pysh on source_file
-p.shyp()
-
 # Example usage
 #$ ls . # comment
 ##$ xdg-open . # double comment to disable in pysh
@@ -45,3 +31,19 @@ print(stdout)
 #>l1
 #>l2
 #>l3
+
+#######################
+
+# run pysh manually
+from pysh import Pysh
+source_file = __file__
+p = Pysh(source_file)
+blocks = p.findblocks()
+
+# Run all blocks and print their stdout
+run_blocks = [block.runp() for block in blocks]
+# Run a a single block and silently
+blocks[0].run()
+
+# Start the python interpreter with pysh on source_file
+p.shyp()
