@@ -33,8 +33,9 @@ class BashBlock(ScriptRun):
         return len(self.lines)
 
     def runp(self):
+        self.run()
         sname = os.path.basename(self.pysh.srcf)
-        stdout = self.wrap().decode("UTF-8").strip()
+        stdout = self.stdout.decode("UTF-8").strip()
         print(f"[root@pysh {sname} {self.blockindex}]$ {stdout}")
         return self
 
@@ -87,23 +88,41 @@ class Pysh():
         return self
 
     # This is for .py srcscripts only
-    def wrap_imports(self):
+    def wrap_imports(self, srcs=None):
+        srcs = self.srcs or None
         # import trimmed pysh
         # inject blocks (serialize to with tmpfile and msgpack)
+        #(?P<block>(?P<blockline>(?P<blockstart>(?<!\#)\#\$+(?P<shell>!*\w*))(?P<pyshstart>[\s])(?P<blockcontents>.*)(?P<eolblock>[\n[^\n]]\s*\#.*)*))
+        #(?P<block>(?P<blockline>(?P<blockstart>(?<!\#)\#\$+(?P<shell>!*\w*))(?P<pyshstart>[\s])(?P<blockcontents>.*)))
+        #(?P<block>(?P<blockline>(?P<blockstart>(?<!\#)\#\$+(?P<shell>!*\w*))(?P<pyshstart>[\s])(?P<blockcontents>.*)*))
+        #(?P<block>(?P<blockline>(?P<blockstart>(?<!\#)\#\$+(?P<shell>!*\w*))(?P<pyshstart>[\s])(?P<linecontents>.*)(?P<eol>\n)))
+        #(?P<block>(?P<blockline>(?P<pyvar>.*\"*)(?P<blockstart>(?<!\#)\#\$+(?P<shell>!*\w*))(?P<pyshstart>[\s])(?P<linecontents>.*)(?P<eol>\n)))
+        #(?P<block>(?P<pyvar>.*\"*)(?P<line>(?P<command>(?<!\#)\#\$+(?P<shell>!*\w*))(?P<space>[\s])(?P<linecontents>.*)(?P<eol>\n)))
 
-        all_blocks = r"(?P<block>\#.*(\n\s*\#.*)*)"
+        #(?P<block>(?P<pyvar>.*)(?P<line>(?P<command>(?<!\#)\#\$+(?P<shell>!*\w*))(?P<space>[\s])(?P<linecontents>.*)(?P<eol>\n)))
+        #(?P<block>(?P<pyvar>.*)(?P<line>(?P<command>(?<!\#)\#\$+(?P<shell>!{0,1}\w*))(?P<space>[\s])(?P<linecontents>.*)(?P<eol>\n)))
+        #(?P<block>(?P<pyvar>.*)(?P<assign>\=\s\"{2})|(?P<line>(?P<command>(?P<init>(?<!\#)\#)(?P<mode>\$+)(?P<shell>!{0,1}\w*))(?P<space>[\s])(?P<linecontents>.*)(?P<eol>\n)))
+
+        # Check pyvar is valid assignment "" - otherwise just run
+        pattern = r"(?P<block>(?P<pyvar>.*)(?P<assign>\=\s\"{2})|(?P<line>(?P<command>(?P<init>(?<!\#)\#)(?P<mode>\$+)(?P<shell>!{0,1}\w*)?)(?P<space>[\s])(?P<linecontents>.*)(?P<eol>\n)))"
         # pysh_blocks = r"(?P<block>[^\#]\#\$.*)"
         # pysh_comments = r"(?P<block>\#\#\$.*)"
         # pysh_extern = r""
 
-        match = re.findall(all_blocks, self.srcf)
+        matches = re.finditer(pattern, srcs)
+        assert matches, "Root source file doesn't contain any Pysh"
+
+        from pprint import pprint
+        for match in matches:
+            pprint(match)
+            pprint(match.groupdict())
         # generate a function wrapper for each block and place at its position
         # ? id the blocks
         # ? string replace with id marker? that references self.blocks.keyed()
         # self.blocks[id].runs() # use BlockWrapper.get(id).run() instead?
 
         # TODO index and replace all pysh() calls for nonblocking
-        pass
+        return None
 
     def wrapped(self, srcs=None):
         srcs = srcs or self.srcs
