@@ -1,12 +1,11 @@
 #!/usr/bin/python
-print("####BEGIN SOURCE")
+import os
+print("####BEGIN SOURCE", os.environ.get("PYSH_ROOT", None), os.environ.get("PYSH_RUNNING", None), os.environ.get("PYSH_BLOCK", None))
 from pprint import pprint
 
 from pysh import Pysh
 source_file = __file__
 pysher = Pysh(source_file)
-
-blocks = pysher.findblocks()
 pysher.shyp()
 
 print("####BEGIN PYSH")

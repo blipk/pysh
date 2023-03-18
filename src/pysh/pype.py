@@ -31,7 +31,8 @@ class pype():
             :raises: error on non-zero process exit code
         """
         env = env or {}
-        env = self.base_env | self.extra_env | env
+        # print("ZZZ", self.extra_env, env)
+        env = self.base_env | env | self.extra_env
         if type(script) == type(Path()):
             command = [shell, str(Path)]
         else:
@@ -70,7 +71,9 @@ class ScriptRun():
                  stderr: str | None = None,
                  hasrun=False,
                  pipe=None,
-                 env=None):
+                 env=None,
+                 timeout=None,
+                 **unset_kwargs):
         self.pipe = pipe or default_pipe
         self.shell = shell
         self.srcs = srcs
@@ -78,16 +81,16 @@ class ScriptRun():
         self.stdout = stdout
         self.stderr = stderr
         self.hasrun = hasrun
-        self.pid = None
         self.exectime = None  # TODO
         self.env = env
+        self.timeout = timeout
 
     def run(self, srcs=None, pipe=None, env=None):
         pipe = pipe or self.pipe
         srcs = srcs or self.srcs
         env = env or self.env
         stdout, stderr, returncode, pid = \
-            pipe.run_script(srcs, shell=self.shell, env=env)
+            pipe.run_script(srcs, shell=self.shell, env=env, timeout=self.timeout)
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
