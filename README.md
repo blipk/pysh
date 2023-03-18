@@ -1,6 +1,6 @@
 ## Pysh
 
-Python source file preprocessor/interpreter to enable running in-line bash code during python runtime
+Python source file preprocessor/interpreter (using regex) to enable running in-line bash code during python runtime
 
 Also can capture stdout into a python variable and use shells beyond bash.
 

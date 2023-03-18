@@ -8,8 +8,13 @@ source_file = __file__
 pysher = Pysh(source_file)
 pysher.shyp()
 
-print("####BEGIN PYSH")
-#$ echo "pysh enabled"
+
+
+print("####BEGIN PYSH", flush=True)
+stdout = ""#$ echo "pysh activated"
+print(stdout)
+
+#$ /usr/bin/zenity --info # pause here
 
 print("IN BETWEEN BLOCKS")
 

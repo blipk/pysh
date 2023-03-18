@@ -18,7 +18,9 @@ class pype():
     def run_script(self, script: str | Path,
                    shell=None,
                    pipe_kwargs: dict = None,
-                   stdin: bytes = None,
+                   stdout=None,
+                   stderr=None,
+                   stdin=None,
                    env=None,
                    raise_errors=True,
                    timeout=None, *args):
@@ -31,7 +33,6 @@ class pype():
             :raises: error on non-zero process exit code
         """
         env = env or {}
-        # print("ZZZ", self.extra_env, env)
         env = self.base_env | env | self.extra_env
         if type(script) == type(Path()):
             command = [shell, str(Path)]
@@ -42,17 +43,22 @@ class pype():
                         "stdin", "raise_errors")
         shell_args = [a for a in args if a not in default_args]  # set -ex
         pipe_kwargs = pipe_kwargs or self.pipe_kwargs or {}
-        pipe_args = dict(stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE,
-                         stdin=subprocess.PIPE,
+        stdout = stdout or subprocess.PIPE
+        stderr = stderr or subprocess.PIPE
+        pipe_args = dict(stdout=stdout,
+                         stderr=stderr,
+                         stdin=stdin or subprocess.PIPE,
+                         bufsize=8192,
                          shell=False,
                          env=env,
                          close_fds=True) | pipe_kwargs
-        #cwd, env
-        # text
+        #cwd, text
         proc = subprocess.Popen(command + shell_args, **pipe_args)
-
-        stdout, stderr = proc.communicate(input=stdin, timeout=timeout)
+        try:
+            stdout, stderr = proc.communicate(input=stdin, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
         if raise_errors and proc.returncode:
             exc_kwargs = dict(stdout=stdout, stderr=stderr,
                               shell=shell, srcs=script)
@@ -73,7 +79,7 @@ class ScriptRun():
                  pipe=None,
                  env=None,
                  timeout=None,
-                 **unset_kwargs):
+                 **kwargs):
         self.pipe = pipe or default_pipe
         self.shell = shell
         self.srcs = srcs
@@ -84,13 +90,21 @@ class ScriptRun():
         self.exectime = None  # TODO
         self.env = env
         self.timeout = timeout
+        self.stdout_pipe = kwargs.get("stdout_pipe", None)
+        self.stderr_pipe = kwargs.get("stderr_pipe", None)
+        self.stdin_pipe = kwargs.get("stdin_pipe", None)
 
     def run(self, srcs=None, pipe=None, env=None):
         pipe = pipe or self.pipe
         srcs = srcs or self.srcs
         env = env or self.env
         stdout, stderr, returncode, pid = \
-            pipe.run_script(srcs, shell=self.shell, env=env, timeout=self.timeout)
+            pipe.run_script(srcs,
+                            shell=self.shell,
+                            stdin=self.stdin_pipe,
+                            stdout=self.stdout_pipe,
+                            stderr=self.stderr_pipe,
+                            env=env, timeout=self.timeout)
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
@@ -106,13 +120,10 @@ class ScriptException(ScriptRun, Exception):
         # For debugging
         with NamedTemporaryFile(mode="w", delete=False) as f:
             f.write(ScriptRunI["srcs"])
-            trace = ScriptRunI['stderr'].decode('UTF-8').replace("<string>", f.name)
+            trace = ScriptRunI['stderr'].decode(
+                'UTF-8').replace("<string>", f.name)
             message = f"Error running {ScriptRunI['shell']} script:\n{trace}"
             super(Exception, self).__init__(message)
-
-        # from pprint import pprint
-        # pprint(self.__dict__)
-        # print(self.stdout)
 
     def __repr__(self):
         return repr_(self)
