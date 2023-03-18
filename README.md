@@ -15,12 +15,26 @@ pysh(__file__)
 stdout = ""#$ echo "This is standard out"
 ```
 
+##### Real usage
+```Python
+# Script your system in paralel with your python code execution
+# Do anything you can in bash e.g.
+#$ firefox https://news.ycombinator.com && echo "opened link in firefox"
+
+build_service()
+#$ cd ~/hosted/myservice && docker compose up
+
+aggregate_assets()
+fmpg_result = ""#$ ffmpeg -i raw_video.mkv -crf {{crf}} -o
+process_assets(process_fmpg_stdout(fmpg_result))
+```
+
 ###### General syntax
 ```Python
 #!/usr/bin/python
-# Python comments
+# This is a python comment
 #$  ls .         # pysh eol comment
-##$ sudo rm -rf  # disable pysh line
+##$ sudo rm -rf  # disable pysh line with pysh comment
 
 # run external script with double $
 #$$ my_script.sh
@@ -38,6 +52,8 @@ stdout = ""#$!python import time; print("The time and date", time.asctime())
 if __name__ == "main":
     print("Before the above script blocks are run")
 ```
+
+
 ###### Multiple inline pysh
 ```Python
 # Pysh runs code in blocks that are executed in-place
@@ -55,19 +71,6 @@ stdout_block2 == ""#$ echo "Second"
 #$ echo "Block"
 ```
 
-##### Real usage
-```Python
-# Script your system in paralel with your python code execution
-# Do anything you can in bash e.g.
-#$ firefox https://news.ycombinator.com && echo "opened link in firefox"
-
-build_service()
-#$ cd ~/hosted/myservice && docker compose up
-
-aggregate_assets()
-fmpg_result = ""#$ ffmpeg -i raw_video.mkv -crf {{crf}} -o
-process_assets(process_fmpg_stdout(fmpg_result))
-```
 
 ##### Advanced usage
 ```Python
