@@ -1,6 +1,10 @@
 ## Pysh
 
-.py file preprocessor/interpreter to enable running in-line bash code at python compile time
+Python source file preprocessor/interpreter to enable running in-line bash code during python runtime
+
+Also can capture stdout into a python variable and use shells beyond bash.
+
+This is done via a basic subprocess wrapper and shell command strings.
 
 ### Examples
 [demo file](demo.py)
