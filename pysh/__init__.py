@@ -15,35 +15,91 @@ PYSH_READ = f'""{PYSH_LINE}'
 PYSH_EXLINE = PYSH_LINE + "$"
 PYSH_EXREAD = PYSH_READ + "$"
 
-block_injector = """
+injector_imports = """import msgpack
+from pathlib import Path
+from pysh import Pysh, pysher, pysh, pype, encode, decode, BashBlock, ScriptException
+"""
+
+block_injector = f"""{injector_imports}
+class BlockInjector():
+    def __init__(self, pysher, pipe=None):
+        self.pysh = pysher
+        self.pipe = pipe or pype()  # keep single pipe context here
+        with open("blocks.dat", "rb") as f:
+            blocks = msgpack.unpackb(f.read(), object_hook=decode)
+        self.blocks = blocks
+        assert self.pysh.srcf == __file__ or self.pysh.srcf == Path(
+            __file__), f"Injector not run from where it was injected {{self.pysh.srcf}} X{{__file__}}"
+        self.pysh.blocks = self.blocks
+
+        # Reserialize references
+        for i, block in enumerate(self.blocks):
+            assert self.blocks[i].serialized == True, "Block was saved without serialized flag"
+            self.blocks[i].pysh = self.pysh
+            blocks[i].pipe = self.pipe
+            # Optionally reset
+
+    def runblock(self, blockid):
+        try:
+            block = self.getblock(blockid)
+            if not block:
+                raise IndexError("Couldn't find block ID in block injector")
+            block.run(pipe=self.pipe)
+        except ScriptException as e:
+            print("ScriptException", e)
+            pass
+        return block.stdout
+
+    def getblock(self, blockid):
+        block = next((b for b in self.blocks if b.blockid == blockid), None)
+        return block
+
+    def getblockidx(self, blockid):
+        block = self.getblock(blockid)
+        index = self.blocks.index(block)
+        return index
+block_injector = BlockInjector(pysher=Pysh(__file__))
 """
 
 
 class BlockInjector():
-    def __init__(self, pysh, pipe=None):
-        self.pysh = pysh
-        self.pype = pipe or pype()  # keep single pipe context here
+    def __init__(self, pysher, pipe=None):
+        self.pysh = pysher
+        self.pipe = pipe or pype()  # keep single pipe context here
         with open("blocks.dat", "rb") as f:
-            blocks = msgpack.unpackb(f.read(), object_hook=encode)
+            blocks = msgpack.unpackb(f.read(), object_hook=decode)
         self.blocks = blocks
         assert self.pysh.srcf == __file__ or self.pysh.srcf == Path(
-            __file__), "Injector not run from where it was injected"
-        self.pysh.blocks = self.block
+            __file__), f"Injector not run from where it was injected {self.pysh.srcf} X{__file__}"
+        self.pysh.blocks = self.blocks
 
         # Reserialize references
-        for block in self.blocks:
-            assert self.blocks[block].pysh == True, "Block was saved without serialized flag"
-            self.blocks[block].pysh = self.pysh
-            # blocks[block].pipe = self.pype
+        for i, block in enumerate(self.blocks):
+            assert self.blocks[i].serialized == True, "Block was saved without serialized flag"
+            self.blocks[i].pysh = self.pysh
+            blocks[i].pipe = self.pipe
             # Optionally reset
 
-    def runblock(self, blocki):
+    def runblock(self, blockid):
         try:
-            block = self.blocks[blocki]
-            block.run(pipe=self.pype)
+            block = self.getblock(blockid)
+            if not block:
+                raise IndexError("Couldn't find block ID in block injector")
+            block.run(pipe=self.pipe)
+            print("stdout = ", block.stdout)
         except ScriptException as e:
+            print("ScriptException", e)
             pass
         return block.stdout
+
+    def getblock(self, blockid):
+        block = next((b for b in self.blocks if b.blockid == blockid), None)
+        return block
+
+    def getblockidx(self, blockid):
+        block = self.getblock(blockid)
+        index = self.blocks.index(block)
+        return index
 
 
 class BashBlock(ScriptRun):
@@ -60,28 +116,27 @@ class BashBlock(ScriptRun):
         self.pysh = pysh
         self.srcf = srcf
         self.lines = lines
-        self.srcs = "\n".join(lines)
         self.blockindex = blockindex
         self.position = position
         self.serialized = serialized
         self.serialc = None
-        super().__init__(srcs=self.srcs)
-        self.pipe = pipe
+        super().__init__(srcs=lines, shell=shell, pipe=pipe)
 
     @property
     def linecount(self):
         return len(self.srcs.split("\n"))
 
-    def run(self, *args):
+    def run(self, *args, **kwargs):
         print("Running block", self.blockid)
-        super().run(*args)
+        super().run(*args, **kwargs)
+        # print("AAA", self.stdout.decode("UTF-8"))
 
-    def runs(self):
-        self.run()
+    def runs(self, *args, **kwargs):
+        self.run(*args, **kwargs)
         return self.stdout
 
-    def runp(self):
-        self.run()
+    def runp(self, *args, **kwargs):
+        self.run(*args, **kwargs)
         sname = os.path.basename(self.pysh.srcf)
         stdout = self.stdout.decode("UTF-8").strip()
         print(f"[root@pysh {sname} {self.blockindex}]$ {stdout}")
@@ -144,40 +199,44 @@ class Pysh():
     def wrap_imports(self, srcs=None, blocks=None):
         srcs = srcs or self.srcs
         blocks = blocks or self.blocks
-        # TODO Replace pysher initialization with classdef for and `block_injector = BlockInjector(pysh)`
 
-        # Block matching
-        pattern = r"(?P<block>(?P<pyvar>.*)(?P<assign>\=\s\"{2})|(?P<line>(?P<command>(?P<init>(?<!\#)\#)(?P<mode>\$+)(?P<shell>!{0,1}\w*)?)(?P<space>[\s])(?P<linecontents>.*)(?P<eol>\n)))"
-        matches = re.finditer(pattern, srcs)
-        assert matches, "Root source file doesn't contain any Pysh"
+        # Inject __file__ as it's not defined passing a command_string to process
+        srclines = srcs.split("\n")
+        srclines.insert(2, f"__file__ = '{self.srcf}'")
 
-        from pprint import pprint
-        for match in matches:
-            pprint(match)
-            pprint(match.groupdict())
-            # TODO match with self.blocks
-            # TODO index and replace all pysh() calls for nonblocking
-            # Replace blocks with `BlockInjector.runblock(block)``
+        # Inject block injector
+        srclines.insert(3, block_injector)
 
-        # String replace blocks with BlockInjector function call
-        src_o = "" + srcs
+        # index and replace all pysher.shyp() and pysh(__file__) calls for nonblocking
+        srclines = [srcline for srcline in srclines if "shyp(" not in srcline and "pysh(" not in srcline]
+        srcsw = "\n".join(srclines)
+
+
         for block in blocks:
-            src_o = src_o.replace(
-                block.srcs, f"BlockInjector.runblock({block.blockid})")
+            # Replace whole line range
+            srcsw = srcsw.replace(
+                block.srcs, f"block_injector.runblock('{block.blockid}')").replace("#$ ", "")
+
+        # replace assignment quotes
+        srcsw = srcsw.replace('""block_injector', "block_injector")
 
         # Save blocks to serial file
         block_file = "blocks.dat"
         with open(block_file, "wb") as f:
-            f.write(msgpack.packb([block.serialize()
+            f.write(msgpack.packb([block
                     for block in self.blocks], default=encode))
 
-        return (src_o, block_file)
+        # print("#----#")
+        # print(srcsw)
+        # print("#----#")
+
+        return (srcsw, block_file)
 
     def wrapped(self, srcs=None, blocks=None):
         srcs = srcs or self.srcs
         blocks = blocks or self.blocks
-        srcsw = self.wrap_imports(srcs, blocks)
-        return srcsw
+        srcsw, block_file = self.wrap_imports(srcs, blocks)
+        return (srcsw, block_file)
 
     def shyp(self, blocks=None, exits=True):
         blocks = blocks or self.blocks
@@ -190,6 +249,7 @@ class Pysh():
                            shell="python",
                            pysh=self)
         pyshed.run()
+        print(pyshed.stdout.decode("UTF-8"))
         Path(block_file).unlink()
         if exits:
             sys.exit(pyshed.returncode)
@@ -225,6 +285,19 @@ class Pysh():
         srcs = srcs or self.srcs
         srclines = srcs.split("\n")
 
+        # Line matching
+        pattern = r"(?P<block>(?P<pyvar>.*)(?P<assign>\=\s\"{2})|(?P<line>(?P<command>(?P<init>(?<!\#)\#)(?P<mode>\$+)(?P<shell>!{0,1}\w*)?)(?P<space>[\s])(?P<linecontents>.*)(?P<eol>\n)))"
+        matches = re.finditer(pattern, srcs)
+        assert matches, "Root source file doesn't contain any Pysh"
+
+        from pprint import pprint
+        for match in matches:
+            pass
+            # pprint(match)
+            # pprint(match.groupdict())
+            # TODO match with self.blocks below
+
+        # BlockLine matching
         block_i = 0
         blocks_raw = []
         block_t = ""
