@@ -7,8 +7,9 @@ import uuid
 import msgpack
 from pathlib import Path
 from ast import literal_eval
-from .pype import pype, ScriptRun, ScriptException, default_pipe
-from .serializer import encode, decode
+
+from pysh.pype import pype, ScriptException, ScriptRun, default_pipe
+from pysh.serializer import encode, decode
 
 PYSH_LINE = "#$"
 PYSH_READ = f'""{PYSH_LINE}'
@@ -65,7 +66,8 @@ block_injector = BlockInjector(pysher=Pysh(__file__))
 class BlockInjector():
     def __init__(self, pysher, pipe=None):
         self.pysh = pysher
-        self.pipe = pipe or pype()  # keep single pipe context here
+        env = os.environ.copy() + {"PYSH_RUNNING": True}
+        self.pipe = pipe or pype(base_env=env)  # keep single pipe context here
         with open("blocks.dat", "rb") as f:
             blocks = msgpack.unpackb(f.read(), object_hook=decode)
         self.blocks = blocks
@@ -111,7 +113,8 @@ class BashBlock(ScriptRun):
                  pysh=None,
                  pipe=default_pipe,
                  serialized=False,
-                 blockid=None, **scriptrun_kwargs):
+                 blockid=None,
+                 env=None, **scriptrun_kwargs):
         self.blockid = blockid or str(uuid.uuid4())
         self.pysh = pysh
         self.srcf = srcf
@@ -120,14 +123,17 @@ class BashBlock(ScriptRun):
         self.position = position
         self.serialized = serialized
         self.serialc = None
-        super().__init__(srcs=lines, shell=shell, pipe=pipe)
+        env = env or {}
+        env = env | {"PYSH_BLOCK": self.blockid}
+        super().__init__(srcs=lines, shell=shell, pipe=pipe, env=env)
 
     @property
     def linecount(self):
         return len(self.srcs.split("\n"))
 
     def run(self, *args, **kwargs):
-        print("Running block", self.blockid)
+        print("Running block", self.blockid, self.srcf)
+        # print(self.srcs)
         super().run(*args, **kwargs)
         # print("AAA", self.stdout.decode("UTF-8"))
 
@@ -158,7 +164,6 @@ class BashBlock(ScriptRun):
         # print(serialized)
         return msgpack.packb(self, default=encode)
 
-
     def __repr__(self) -> str:
         classname = self.__class__.__name__
         args = ", ".join(
@@ -167,31 +172,30 @@ class BashBlock(ScriptRun):
 
 
 class Pysh():
-    def __init__(self, srcf=__file__) -> None:
+    def __init__(self, srcf, init=True) -> None:
         """
         """
-        self.srcf = os.path.realpath(srcf)
-        self.srcs = self.readsrc()
-        self.srclines = self.srcs.split("\n")
         self.blocks = []
-        # self.cursor = 0 # TODO
+        if init is not False:
+            self.updatesrc(srcf)
 
-    def readsrc(self, srcf=None):
+    def readsrc(self):
         srcs = None
-        srcf = srcf or self.srcf
-        with open(srcf, "r") as f:
+        with open(self.srcf, "r") as f:
             srcs = f.read()
         return srcs
 
     def updatesrc(self, srcf):
-        self.srcf = srcf
+        self.srcf = os.path.realpath(srcf)
         self.srcs = self.readsrc()
         self.srclines = self.srcs.split("\n")
-        self.blocks = []
+        self.blocks = self.findblocks()
 
     def pysh(self, srcf=None, exits=True):
+        if os.environ.get("PYSH_ROOT", None):
+            return print("PYSH ALREADY RUNNING")
         srcf = srcf or self.srcf
-        blocks = self.findblocks()
+        self.updatesrc(srcf)
         ret = self.shyp(exits)
         return self
 
@@ -200,22 +204,17 @@ class Pysh():
         srcs = srcs or self.srcs
         blocks = blocks or self.blocks
 
-        # Inject __file__ as it's not defined passing a command_string to process
         srclines = srcs.split("\n")
+        # Inject __file__ as it's not defined passing a command_string to process
         srclines.insert(2, f"__file__ = '{self.srcf}'")
-
         # Inject block injector
         srclines.insert(3, block_injector)
-
-        # index and replace all pysher.shyp() and pysh(__file__) calls for nonblocking
-        srclines = [srcline for srcline in srclines if "shyp(" not in srcline and "pysh(" not in srcline]
         srcsw = "\n".join(srclines)
-
 
         for block in blocks:
             # Replace whole line range
             srcsw = srcsw.replace(
-                block.srcs, f"block_injector.runblock('{block.blockid}')").replace("#$ ", "")
+                block.srcs, f"block_injector.runblock('{block.blockid}')\n").replace(PYSH_LINE + " ", "")
 
         # replace assignment quotes
         srcsw = srcsw.replace('""block_injector', "block_injector")
@@ -238,16 +237,19 @@ class Pysh():
         srcsw, block_file = self.wrap_imports(srcs, blocks)
         return (srcsw, block_file)
 
-    def shyp(self, blocks=None, exits=True):
-        blocks = blocks or self.blocks
+    def shyp(self, exits=True):
+        if os.environ.get("PYSH_ROOT", None):
+            return print("PYSH ALREADY RUNNING")
         # Run this script with the wrapped pysh calls and then exit
         root_script, block_file = self.wrapped()
+        env = {"PYSH_ROOT": "1"}
         pyshed = BashBlock(root_script,
                            0,
                            (0, -1),
                            self.srcf,
                            shell="python",
-                           pysh=self)
+                           pysh=self,
+                           env=env)
         pyshed.run()
         print(pyshed.stdout.decode("UTF-8"))
         Path(block_file).unlink()
@@ -284,6 +286,7 @@ class Pysh():
     def findblocks(self, srcs=None):
         srcs = srcs or self.srcs
         srclines = srcs.split("\n")
+        print(self.srcf)
 
         # Line matching
         pattern = r"(?P<block>(?P<pyvar>.*)(?P<assign>\=\s\"{2})|(?P<line>(?P<command>(?P<init>(?<!\#)\#)(?P<mode>\$+)(?P<shell>!{0,1}\w*)?)(?P<space>[\s])(?P<linecontents>.*)(?P<eol>\n)))"
@@ -293,8 +296,8 @@ class Pysh():
         from pprint import pprint
         for match in matches:
             pass
-            # pprint(match)
-            # pprint(match.groupdict())
+            pprint(match)
+            pprint(match.groupdict())
             # TODO match with self.blocks below
 
         # BlockLine matching
@@ -319,6 +322,7 @@ class Pysh():
                 block_end_i = i
                 # block_t = block_t.strip()
                 block_position = (block_start_i, block_end_i)
+                # print(block_position) # line number
                 blocks_raw.append((block_t, block_i, block_position))
                 block_t = ""
                 block_line_c = 0
@@ -326,12 +330,16 @@ class Pysh():
             block_line_c += 1
 
         self.blocks = [BashBlock(block_t, blockindex, position,
-                                 self.srcf,
+                                 "#internal",
                                  pysh=self)
                        for (block_t, blockindex, position) in blocks_raw]
+        # sys.exit(1)
         return self.blocks
 
 
 # Function wrapper to run on call source
-pysher = Pysh()
+from inspect import stack
+from os.path import realpath
+importer = realpath(stack()[-1].filename)
+pysher = Pysh(importer, init=False)
 pysh = pysher.pysh

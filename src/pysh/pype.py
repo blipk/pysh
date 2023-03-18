@@ -2,16 +2,18 @@
 import os
 import subprocess
 from pathlib import Path
-from .utils import repr_
+from tempfile import NamedTemporaryFile
+from pysh.utils import repr_
 
 shells = ("bash", "python")
 
 
 class pype():
-    def __init__(self, pipe_kwargs=None, env=None):
+    def __init__(self, pipe_kwargs=None, base_env=None, extra_env=None):
         self.pipe_kwargs = pipe_kwargs
         self.default_shell = shells[0]
-        self.env = None
+        self.base_env = base_env or os.environ.copy()
+        self.extra_env = extra_env or {}
 
     def run_script(self, script: str | Path,
                    shell=None,
@@ -28,7 +30,8 @@ class pype():
             :returns: (stdout, stderr)
             :raises: error on non-zero process exit code
         """
-        env = env or self.env or os.environ.copy()
+        env = env or {}
+        env = self.base_env | self.extra_env | env
         if type(script) == type(Path()):
             command = [shell, str(Path)]
         else:
@@ -79,11 +82,12 @@ class ScriptRun():
         self.exectime = None  # TODO
         self.env = env
 
-    def run(self, srcs=None, pipe=None):
+    def run(self, srcs=None, pipe=None, env=None):
         pipe = pipe or self.pipe
         srcs = srcs or self.srcs
-        stdout, stderr, returncode, pid = pipe.run_script(
-            srcs, shell=self.shell, env=self.env)
+        env = env or self.env
+        stdout, stderr, returncode, pid = \
+            pipe.run_script(srcs, shell=self.shell, env=env)
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
@@ -94,10 +98,15 @@ class ScriptRun():
 
 class ScriptException(ScriptRun, Exception):
     def __init__(self, proc, **ScriptRunI):
-        super().__init__(**ScriptRunI)
-        super(Exception, self).__init__(
-            f"Error running {ScriptRunI['shell']} script:\n{ScriptRunI['stderr'].decode('UTF-8')}")
         self.proc = proc
+        super().__init__(**ScriptRunI)
+        # For debugging
+        with NamedTemporaryFile(mode="w", delete=False) as f:
+            f.write(ScriptRunI["srcs"])
+            trace = ScriptRunI['stderr'].decode('UTF-8').replace("<string>", f.name)
+            message = f"Error running {ScriptRunI['shell']} script:\n{trace}"
+            super(Exception, self).__init__(message)
+
         # from pprint import pprint
         # pprint(self.__dict__)
         # print(self.stdout)

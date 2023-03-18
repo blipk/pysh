@@ -1,14 +1,16 @@
 #!/usr/bin/python
+import sys
 
-from pysh import pysh
+from pysh import pysher, pysh
 
 # run pysh whenever this file is interpreted
 pysh(__file__)
-#$ echo "Pysh activated"
+test = ""#$ echo "Pysh activated"
 
 # Example usage
 #$ ls . # comment
 ##$ xdg-open . # double comment to disable in pysh
+sys.exit(0)
 #$$ my_script.sh arg1 arg2 # run a bash script and pass arguments to it with double $
 
 # Script your system in paralel with your python code execution

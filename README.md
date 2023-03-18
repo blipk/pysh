@@ -13,7 +13,7 @@ This is done via a basic subprocess wrapper and shell command strings.
 ```Python
 #!/usr/bin/env python
 from pysh import pysh
-pysh(__file__)
+pysh()
 
 #$ echo "Pysh activated"
 stdout = ""#$ echo "This is standard out"
@@ -86,7 +86,7 @@ blocks = pysher.findblocks()
 
 # Run a a single block
 blocks[0].run()  # Not run in-place, no stdout. Silent.
-blocks[0].runp() # Will print stdout with label for block
+blocks[0].runp() # Run script block again, and print stdout with label for block
 
 # Run all wanted blocks sequentially at this point,
 # and print their stdout with labels
@@ -98,8 +98,12 @@ run_blocks = [block.runp() for block in blocks
 pysher.shyp()
 #$ echo "pysh enabled"
 
-# Switch to another source file - can then run another pysh interpeter
+# Switch to another source file and run it through pysh
+pysher.pysh(__file__)
+
+# Equivalent to above
 pysher.updatesrc(__file__)
+pysher.pysh()
 
 # Get information about the script blocks at runtime
 t_block = pysher.blocks[0]
