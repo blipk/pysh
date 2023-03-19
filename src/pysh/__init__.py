@@ -139,6 +139,7 @@ class BashBlock(ScriptRun):
 
     def run(self, *args, argvarvals=[], **kwargs):
         srcsw = self.srcs
+        # Interpolate the {$$} vars into the source
         if argvarvals or self.argvarmatches:
             assert len(argvarvals) == len(
                 self.argvarmatches), "Provided runvars don't match block.argvars"

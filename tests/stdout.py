@@ -15,7 +15,8 @@ print("WAIT for user dialog")
 
 print("STDOUT BLOCKED IN BETWEEN BLOCKS")
 
-multiline_stdout = ""#$ echo "pysh test"
+text = "pysh test"
+multiline_stdout = ""#$ echo "{$text$}"
 #$ echo "pysh test line 2"
 assert multiline_stdout == b"pysh test\npysh test line 2\n", f"multiline_stdout wrong: {multiline_stdout}"
 

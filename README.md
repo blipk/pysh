@@ -29,7 +29,8 @@ build_service()
 #$ cd ~/hosted/myservice && docker compose up
 
 aggregate_assets()
-fmpg_result = ""#$ ffmpeg -i raw_video.mkv -crf {{crf}} -o
+crf = "23"
+fmpg_result = ""#$ ffmpeg -i raw_video.mkv -crf {$crf$} -o
 process_assets(process_fmpg_stdout(fmpg_result))
 ```
 
