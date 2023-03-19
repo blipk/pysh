@@ -3,7 +3,7 @@ import os
 import subprocess
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from pysh.utils import repr_
+from pysh.utils import repr_, timeit
 
 shells = ("bash", "python")
 
@@ -23,7 +23,9 @@ class pype():
                    stdin=None,
                    env=None,
                    raise_errors=True,
-                   timeout=None, *args):
+                   timeout=None,
+                   raw_command=False,
+                   command_args=[]):
         """ Run string source script in bash or python by passing a command_string string with the -c flag or calling a script file
 
             :param script: as str to pass a command string to the shell,
@@ -34,14 +36,17 @@ class pype():
         """
         env = env or {}
         env = self.base_env | env | self.extra_env
+        shell = shell or self.default_shell
+
         if type(script) == type(Path()):
             command = [shell, str(Path)]
         else:
             command = [shell, "-c", script]
-        shell = shell or self.default_shell
+        if raw_command == True:
+            command = [shell]
         default_args = ("script", "shell", "pipe_kwargs",
                         "stdin", "raise_errors")
-        shell_args = [a for a in args if a not in default_args]  # set -ex
+        command_args = [a for a in command_args if a not in default_args]  # set -ex
         pipe_kwargs = pipe_kwargs or self.pipe_kwargs or {}
         stdout = stdout or subprocess.PIPE
         stderr = stderr or subprocess.PIPE
@@ -53,12 +58,14 @@ class pype():
                          env=env,
                          close_fds=True) | pipe_kwargs
         #cwd, text
-        proc = subprocess.Popen(command + shell_args, **pipe_args)
+        proc = subprocess.Popen(command + command_args, **pipe_args)
         try:
             stdout, stderr = proc.communicate(input=stdin, timeout=timeout)
         except subprocess.TimeoutExpired:
             proc.kill()
             stdout, stderr = proc.communicate()
+        if raise_errors is None:
+            raise_errors = True
         if raise_errors and proc.returncode:
             exc_kwargs = dict(stdout=stdout, stderr=stderr,
                               shell=shell, srcs=script)
@@ -79,6 +86,9 @@ class ScriptRun():
                  pipe=None,
                  env=None,
                  timeout=None,
+                 raise_errors=None,
+                 command_args=[],
+                 raw_command=False,
                  **kwargs):
         self.pipe = pipe or default_pipe
         self.shell = shell
@@ -90,6 +100,9 @@ class ScriptRun():
         self.exectime = None  # TODO
         self.env = env
         self.timeout = timeout
+        self.raise_errors = raise_errors
+        self.command_args = command_args
+        self.raw_command = raw_command
         self.stdout_pipe = kwargs.get("stdout_pipe", None)
         self.stderr_pipe = kwargs.get("stderr_pipe", None)
         self.stdin_pipe = kwargs.get("stdin_pipe", None)
@@ -104,7 +117,11 @@ class ScriptRun():
                             stdin=self.stdin_pipe,
                             stdout=self.stdout_pipe,
                             stderr=self.stderr_pipe,
-                            env=env, timeout=self.timeout)
+                            raise_errors=self.raise_errors,
+                            command_args=self.command_args,
+                            raw_command=self.raw_command,
+                            env=env,
+                            timeout=self.timeout)
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
@@ -120,7 +137,7 @@ class ScriptException(ScriptRun, Exception):
         # For debugging
         with NamedTemporaryFile(mode="w", delete=False) as f:
             f.write(ScriptRunI["srcs"])
-            trace = ScriptRunI['stderr'].decode(
+            trace = ScriptRunI["stderr"].decode(
                 'UTF-8').replace("<string>", f.name)
             message = f"Error running {ScriptRunI['shell']} script:\n{trace}"
             super(Exception, self).__init__(message)
