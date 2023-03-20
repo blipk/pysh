@@ -6,6 +6,11 @@ Also can capture stdout into a python variable and use shells beyond bash.
 
 This is done via a processing the source with regex and a basic subprocess wrapper using shell command strings.
 
+### Installation
+
+Install to local folder:
+`pip3 install -e "git+https://github.com/blipk/pysh.git#egg=pysh"`
+
 ### Examples
 [demo file](demo.py)
 
