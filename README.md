@@ -30,7 +30,8 @@ build_service()
 
 aggregate_assets()
 crf = "23"
-fmpg_result = ""#$ ffmpeg -i raw_video.mkv -crf {$crf$} -o
+out_file = "out.mp4"
+fmpg_result = ""#$ ffmpeg -i raw_video.mkv -crf {$crf$} -o {$out_file$}
 process_assets(process_fmpg_stdout(fmpg_result))
 ```
 
@@ -40,6 +41,10 @@ process_assets(process_fmpg_stdout(fmpg_result))
 # This is a python comment
 #$  ls .         # pysh eol comment
 ##$ sudo rm -rf  # disable pysh line with pysh comment
+
+# Pass any python variable thats in scope to the pysh script
+my_var = "hello"
+stdout = ""#$ echo "{$myvar$}"
 
 # run external script with double $
 #$$ my_script.sh
