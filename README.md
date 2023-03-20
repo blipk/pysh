@@ -16,6 +16,8 @@ print(stdout)
 
 Use #$ flagged directives to signify shell code to be piped through a subprocess.
 
+When you run pysh() execution stops, and the source file will be processed with regex to extract and replace the code blocks with a subprocess wrapper, and then the source file itself is run through it.
+
 ##### Real usage
 ```Python
 # Script your system in parallel with your python code execution
@@ -50,9 +52,20 @@ Git to local folder:
 ###### General syntax
 ```Python
 #!/usr/bin/python
+from pysh import pysh
+pysh()
+#$ echo "pysh activated" >> .pysh
+
+# Use the @ flag to always print(stdout) to main sys.stdout
+#$@ echo "hello from bash"
+
 # This is a python comment
-#$  ls .         # pysh eol comment
-##$ sudo rm -rf  # disable pysh line with pysh comment
+#$@ ls .            # shell eol comment
+##$ sudo rm -rf /   # disable pysh line with pysh comment
+
+# Capture stdout from the shell subprocess
+stout = ""#$ echo "I'm actually a bytes string"
+print(stdout.decode("UTF-8"))
 
 # Pass any python variable thats in scope to the pysh script
 my_var = "hello"
@@ -80,9 +93,6 @@ try:
     result = ""#$$% tests/dinger/notfoundscript.sh "argone"
 except SystemExit as e:
     print("Error", e)
-
-# Use the @ flag to always print(stdout)
-#$@ echo "hello"     # Will print it's stdout to sys.stdout without capturing in a var
 
 if __name__ == "main":
     print("Before the above script blocks are run")
