@@ -6,6 +6,7 @@ from pysh import Pysh, ScriptException
 source_file = __file__
 pysher = Pysh(source_file, test_mode=False)
 pysher.shyp()
+#$@ echo "pysh activated"
 
 # Alternate shells
 text = "The time and date"
@@ -34,7 +35,8 @@ try:
     extern_stdout = ""#$$% tests/notfoundscript.sh "argone" "argtwo"
     print(extern_stdout)
 except SystemExit as e:
-    print("Error:", e)
+    print("Caught expection ScriptException")
+    # print("Error:", e)
 
 
 print("Test Passed")

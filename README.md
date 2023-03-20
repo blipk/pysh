@@ -57,12 +57,21 @@ stdout = ""#$ echo "{$myvar$}"
 # optionally pass arguments to it
 #$$ argumentative_script.sh arg1 arg2
 
-# Change the shell that interprets the script
+# Use the ! flag to hange the shell that interprets the script
 # must support -c command_strings or filepath if external $$
 #$!sh echo "simple"
 #$!perl oysters.pl
 #$$!bash script.sh
 stdout = ""#$!python import time; print("The time and date", time.asctime())
+
+# Use the % flag to catch errors
+try:
+    result = ""#$$% tests/dinger/notfoundscript.sh "argone"
+except SystemExit as e:
+    print("Error", e)
+
+# Use the @ flag to always print(stdout)
+#$@ echo "hello"     # Will print it's stdout to sys.stdout without capturing in a var
 
 if __name__ == "main":
     print("Before the above script blocks are run")

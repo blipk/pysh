@@ -63,6 +63,8 @@ class BlockInjector():
                 raise SystemExit(message) from e
             else:
                 print("!!!ScriptException", e)
+        if "@" in block.flags:
+            print(block.stdout.decode("UTF-8").strip())
         return block.stdout
 
     def getblock(self, blockid):
@@ -114,6 +116,8 @@ class BlockInjector():
                 raise SystemExit(message) from e
             else:
                 print("!!!ScriptException", e)
+        if "@" in block.flags:
+            print(block.stdout.decode("UTF-8").strip())
         return block.stdout
 
     def getblock(self, blockid):
@@ -139,6 +143,7 @@ class BashBlock(ScriptRun):
                  env=None,
                  matches=None,
                  argvarmatches=None,
+                 flags=None,
                  **scriptrun_args):
         self.blockid = blockid or str(uuid.uuid4())
         self.pysh = pysh
@@ -146,6 +151,7 @@ class BashBlock(ScriptRun):
         self.blockindex = blockindex
         self.position = position
         self.serialized = serialized
+        self.flags = flags
         env = env or {}
         env = env | {"PYSH_BLOCK": self.blockid}
         self.matches = matches
@@ -411,7 +417,8 @@ class Pysh():
                                      argvarmatches=argvarmatches,
                                      command_args=command_args,
                                      raise_errors=raise_errors,
-                                     raw_command=raw_command)
+                                     raw_command=raw_command,
+                                     flags=block_start_m["flags"])
             new_blocks.append(script_block)
         if self.test_mode:
             for block in new_blocks:
