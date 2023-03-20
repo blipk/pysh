@@ -1,10 +1,40 @@
-## Pysh
+## Pysh/Pype
 
-Python source file preprocessor/interpreter to enable running in-line bash code during python runtime
+Python source file preprocessor/interpreter and subprocess pipe manager to enable running in-line bash/shell code during python runtime.
 
-Also can capture stdout into a python variable and use shells beyond bash.
+```Python
+#!/usr/bin/env python
+from pysh import pysh
+pysh()
 
-This is done by processing the source with regex and a basic subprocess wrapper using shell command strings.
+#$@ echo "Pysh activated"
+stdout = ""#$ echo "This is standard out"
+print(stdout)
+
+##@!python print("Python through a pysh pype")
+```
+
+Use #$ flagged directives to signify shell code to be piped through a subprocess.
+
+##### Real usage
+```Python
+# Script your system in parallel with your python code execution
+# Do anything you can in bash e.g.
+
+build_service()
+#$ cd ~/hosted/myservice && docker compose up
+
+aggregate_assets()
+crf = "23"
+in_file = "/path/in.mp4"
+out_file = "/path/out.mp4"
+fmpg_result = ""#$ ffmpeg -i {$in_file$} \
+#$ -crf {$crf$} -o {$out_file$} \
+#$ && rm {$in_file$}
+process_assets(process_fmpg_stdout(fmpg_result))
+
+print("Process complete")
+```
 
 ### Installation
 From PyPI:
@@ -15,34 +45,7 @@ Git to local folder:
 
 `pip3 install -e "git+https://github.com/blipk/pysh.git#egg=pysh"`
 
-### Examples
-[demo file](demo.py)
 
-###### Run pysh whenever this source file is interpreted
-```Python
-#!/usr/bin/env python
-from pysh import pysh
-pysh()
-
-#$ echo "Pysh activated"
-stdout = ""#$ echo "This is standard out"
-```
-
-##### Real usage
-```Python
-# Script your system in paralel with your python code execution
-# Do anything you can in bash e.g.
-#$ firefox https://news.ycombinator.com && echo "opened link in firefox"
-
-build_service()
-#$ cd ~/hosted/myservice && docker compose up
-
-aggregate_assets()
-crf = "23"
-out_file = "out.mp4"
-fmpg_result = ""#$ ffmpeg -i raw_video.mkv -crf {$crf$} -o {$out_file$}
-process_assets(process_fmpg_stdout(fmpg_result))
-```
 
 ###### General syntax
 ```Python
@@ -61,14 +64,18 @@ stdout = ""#$ echo "{$myvar$}"
 # optionally pass arguments to it
 #$$ argumentative_script.sh arg1 arg2
 
-# Use the ! flag to hange the shell that interprets the script
+# Use the ! flag to change the shell that interprets the script
 # must support -c command_strings or filepath if external $$
 #$!sh echo "simple"
 #$!perl oysters.pl
-#$$!bash script.sh
-stdout = ""#$!python import time; print("The time and date", time.asctime())
+#$$@!bash printscript.sh
 
-# Use the % flag to catch errors
+# Multiple flags/features
+stdout = ""#$@!python import time
+#$ print("The time and date", time.asctime())
+
+# Use the % flag to catch errors,
+# otherwise they will be printed but not raised
 try:
     result = ""#$$% tests/dinger/notfoundscript.sh "argone"
 except SystemExit as e:
@@ -110,7 +117,9 @@ blocks = pysher.findblocks()
 
 # Run a a single block
 blocks[0].run()  # Not run in-place, no stdout. Silent.
-blocks[0].runp() # Run script block again, and print stdout with label for block
+
+# Run script block again, and print stdout with label for block
+blocks[0].runp()
 
 # Run all wanted blocks sequentially at this point,
 # and print their stdout with labels

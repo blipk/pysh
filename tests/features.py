@@ -12,7 +12,8 @@ pysher.shyp()
 text = "The time and date"
 import time
 ttime = time.asctime()
-py_stdout = ""#$!python import time; print("{$text$}", "{$ttime$}")
+py_stdout = ""#$@!python import time
+#$ print("{$text$}", "{$ttime$}")
 print("py_stdout = ", py_stdout)
 should_be = bytes((text + " " + ttime + "\n").encode("UTF-8"))
 assert py_stdout == should_be, f"py_stdout is wrong: {py_stdout}"
