@@ -4,7 +4,7 @@ Python source file preprocessor/interpreter to enable running in-line bash code 
 
 Also can capture stdout into a python variable and use shells beyond bash.
 
-This is done via a processing the source with regex and a basic subprocess wrapper using shell command strings.
+This is done by processing the source with regex and a basic subprocess wrapper using shell command strings.
 
 ### Installation
 
