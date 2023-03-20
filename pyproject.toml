@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyshpype"
-version = "0.1.0"
+version = "0.1.1"
 description = "Run shell in python"
 authors = [
     "Blipk A.D."
