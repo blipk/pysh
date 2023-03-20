@@ -7,7 +7,7 @@ source_file = __file__
 pysher = Pysh(source_file)
 pysher.shyp()
 
-stdout = ""#$ echo "pysh activated"
+stdout = ""#$@ echo "pysh activated"
 assert stdout == b"pysh activated\n", f"stdout wrong: {stdout}"
 
 print("WAIT for user dialog")
