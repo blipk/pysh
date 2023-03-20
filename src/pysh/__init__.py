@@ -403,7 +403,7 @@ class Pysh():
         return repr_(self, ["blocks"])
 
 
-if os.environ.get("PYSH_ROOT", None) == "1":
+if os.environ.get("PYSH_ROOT", None) != "1":
     # print("#####PYSH_ROOT no creating importable instance")
 
     # Function wrapper to run on call source
@@ -411,3 +411,6 @@ if os.environ.get("PYSH_ROOT", None) == "1":
         return realpath(stack()[-1].filename)
     pysher = Pysh(x(), init=False)
     pysh = pysher.pysh
+else:
+    pysher = None
+    pysh = None
