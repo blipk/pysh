@@ -20,21 +20,24 @@ PYSH_LINE = "#$"
 injector_imports = """import os
 import msgpack
 from pathlib import Path
-from pysh import Pysh, pysher, pysh, pype, encode, decode, BashBlock, ScriptException, timeit
+from pysh import Pysh, pysher, pysh, encode, decode, BashBlock, timeit
+from pysh.pype import pype, ScriptException
 """
 
-block_injector = f"""{injector_imports}
+block_injector = injector_imports + """
 class BlockInjector():
     def __init__(self, pysher, pipe=None):
         self.pysh = pysher
-        env = {{"PYSH_RUNNING": "1"}}
-        self.pipe = pipe or pype(extra_env=env)  # keep single pipe context here
+        env = {"PYSH_RUNNING": "1"}
+        # keep single pipe context here
+        self.pipe = pipe or pype(extra_env=env)
         with open("blocks.dat", "rb") as f:
-            blocks = msgpack.unpackb(f.read(), object_hook=decode)
+            blocks, srcsw = msgpack.unpackb(f.read(), object_hook=decode)
         self.blocks = blocks
         assert self.pysh.srcf == __file__ or self.pysh.srcf == Path(
-            __file__), f"Injector not run from where it was injected {{self.pysh.srcf}} X{{__file__}}"
+            __file__), f"Injector not run from where it was injected {self.pysh.srcf} X{__file__}"
         self.pysh.blocks = self.blocks
+        self.pysh.srcsw = srcsw
 
         # Reserialize references
         for i, block in enumerate(self.blocks):
@@ -50,8 +53,16 @@ class BlockInjector():
                 raise IndexError("Couldn't find block ID in block injector")
             block.run(pipe=self.pipe, argvarvals=argvarvals)
         except ScriptException as e:
-            print("ScriptException", e)
-            pass
+            if block.raise_errors:
+                from traceback import format_exc
+                from tempfile import NamedTemporaryFile
+                with NamedTemporaryFile(mode="w", delete=False) as f:
+                    trace_string = format_exc()
+                    message = trace_string.replace("<string>", f.name)
+                    f.write(self.pysh.srcsw)
+                raise SystemExit(message) from e
+            else:
+                print("!!!ScriptException", e)
         return block.stdout
 
     def getblock(self, blockid):
@@ -65,7 +76,6 @@ class BlockInjector():
 block_injector = BlockInjector(pysher=Pysh(__file__))
 """
 
-
 class BlockInjector():
     def __init__(self, pysher, pipe=None):
         self.pysh = pysher
@@ -73,11 +83,12 @@ class BlockInjector():
         # keep single pipe context here
         self.pipe = pipe or pype(extra_env=env)
         with open("blocks.dat", "rb") as f:
-            blocks = msgpack.unpackb(f.read(), object_hook=decode)
+            blocks, srcsw = msgpack.unpackb(f.read(), object_hook=decode)
         self.blocks = blocks
         assert self.pysh.srcf == __file__ or self.pysh.srcf == Path(
             __file__), f"Injector not run from where it was injected {self.pysh.srcf} X{__file__}"
         self.pysh.blocks = self.blocks
+        self.pysh.srcsw = srcsw
 
         # Reserialize references
         for i, block in enumerate(self.blocks):
@@ -93,8 +104,16 @@ class BlockInjector():
                 raise IndexError("Couldn't find block ID in block injector")
             block.run(pipe=self.pipe, argvarvals=argvarvals)
         except ScriptException as e:
-            print("ScriptException", e)
-            pass
+            if block.raise_errors:
+                from traceback import format_exc
+                from tempfile import NamedTemporaryFile
+                with NamedTemporaryFile(mode="w", delete=False) as f:
+                    trace_string = format_exc()
+                    message = trace_string.replace("<string>", f.name)
+                    f.write(self.pysh.srcsw)
+                raise SystemExit(message) from e
+            else:
+                print("!!!ScriptException", e)
         return block.stdout
 
     def getblock(self, blockid):
@@ -176,6 +195,8 @@ class Pysh():
         """
         self.blocks = []
         self.test_mode = test_mode
+        self.srcsw = None
+        self.pyshed_block = None
         if init is not False:
             self.updatesrc(srcf)
 
@@ -222,6 +243,7 @@ class Pysh():
                            stdout_pipe=sys.stdout,
                            raise_errors=False,
                            env=env)
+        self.pyshed_block = pyshed
         if self.test_mode:
             print("#####PYSH_SHIPPED")
         pyshed.run()
@@ -234,6 +256,7 @@ class Pysh():
         srcs = srcs or self.srcs
         blocks = blocks or self.blocks
         srcsw, block_file = self.wrap_imports(srcs, blocks)
+        self.srcsw = srcsw
         return (srcsw, block_file)
 
     def wrap_imports(self, srcs=None, blocks=None):
@@ -283,8 +306,8 @@ class Pysh():
         # Save blocks to serial file
         block_file = "blocks.dat"
         with open(block_file, "wb") as f:
-            f.write(msgpack.packb([block
-                    for block in self.blocks], default=encode))
+            f.write(msgpack.packb(([block
+                    for block in self.blocks], srcsw), default=encode))
 
         # print("#----#")
         # print(srcsw)
@@ -304,7 +327,7 @@ class Pysh():
             return self.blocks
 
         # Extract the pysh syntax lines with regex
-        pattern = r"(?P<block>(?P<pyvar>.*)(?P<assign>\=\s\"{2})|(?P<line>(?P<command>(?P<init>(?<!\#)\#)(?P<mode>\$+)(?P<smarker>!{0,1})(?P<shell>\w*)?)(?P<space>[\s]+)(?P<linecontents>.*)(?P<eol>\n)))"
+        pattern = r"(?P<block>(?P<pyvar>.*)(?P<assign>\=\s\"{2})|(?P<line>(?P<command>(?P<init>(?<!\#)\#)(?P<mode>\$+)(?P<flags>(%{0,1})(@{0,1})(!{0,1}))(?P<shell>\w*)?)(?P<space>[\s]+)(?P<linecontents>.*)(?P<eol>\n)))"
         matches = re.finditer(pattern, srcs)
         assert matches, "Root source file doesn't contain any Pysh"
         matches = list(matches)
@@ -351,12 +374,12 @@ class Pysh():
             whole = (sstart, eend)
             matches_groups = sorted(
                 [m.groupdict() | {"_span": m.span()} for m in matches], key=lambda x: x["_span"][0])
+            assignment = next(
+                (mgroup for mgroup in matches_groups if mgroup["assign"]), None)
             block_start_m = next(
                 (m for m in matches_groups if "linecontents" in m and m["linecontents"]))
             shell = next((mgroup for mgroup in matches_groups if mgroup["shell"] and not mgroup["assign"]), {
                          "shell": None})["shell"]
-            assignment = next(
-                (mgroup for mgroup in matches_groups if mgroup["assign"]), None)
             spanend = (assignment["_span"][1], eend) if assignment else whole
             position = (whole, spanend)
             block_srcs = reduce_mblocks_t(mblock)
@@ -369,12 +392,15 @@ class Pysh():
                 assert m["block"] == m["line"] if m[
                     "line"] is not None else True, f"line doesnt match block \n{m['block']}\n{m['line']}"
             command_args = []
-            raw_command=False
+            raw_command = False
             if len(block_start_m["mode"] or "") > 1:
                 assert len(matches_groups) == 1 or (matches_groups[0]["pyvar"] and len(matches_groups) == 2), \
                     f"Extern blocklinegroup mixed with others \n {matches_groups}"
                 command_args = shlex.split(block_start_m["linecontents"])
                 raw_command = True
+            raise_errors = False
+            if "%" in block_start_m["flags"]:
+                raise_errors = True
             script_block = BashBlock(srcs=block_srcs,
                                      shell=shell,
                                      blockindex=i,
@@ -384,11 +410,12 @@ class Pysh():
                                      matches=matches_groups,
                                      argvarmatches=argvarmatches,
                                      command_args=command_args,
+                                     raise_errors=raise_errors,
                                      raw_command=raw_command)
             new_blocks.append(script_block)
         if self.test_mode:
             for block in new_blocks:
-                print(repr_(block, incl=["position", "srcs"]))
+                print(repr_(block, incl=["position", "srcs", "raise_errors"]))
                 for match in block.matches:
                     print(repr_(match, incl=["_span", "block", "line"]))
             # sys.exit(0)

@@ -2,7 +2,7 @@
 import os
 print("####BEGIN TEST", os.environ.get("PYSH_ROOT", None), os.environ.get("PYSH_RUNNING", None), os.environ.get("PYSH_BLOCK", None))
 
-from pysh import Pysh
+from pysh import Pysh, ScriptException
 source_file = __file__
 pysher = Pysh(source_file, test_mode=False)
 pysher.shyp()
@@ -28,6 +28,13 @@ print("CWD:", stdout)
 extern_stdout = ""#$$ tests/myscript.sh "argone" "argtwo"
 assert extern_stdout == b"external script. args: argone argtwo\n", "external script output is wrong"
 print("Extern:", extern_stdout)
+
+# Missing script
+try:
+    extern_stdout = ""#$$% tests/notfoundscript.sh "argone" "argtwo"
+    print(extern_stdout)
+except SystemExit as e:
+    print("Error:", e)
 
 
 print("Test Passed")

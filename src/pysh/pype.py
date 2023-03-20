@@ -46,7 +46,8 @@ class pype():
             command = [shell]
         default_args = ("script", "shell", "pipe_kwargs",
                         "stdin", "raise_errors")
-        command_args = [a for a in command_args if a not in default_args]  # set -ex
+        command_args = [
+            a for a in command_args if a not in default_args]  # set -ex
         pipe_kwargs = pipe_kwargs or self.pipe_kwargs or {}
         stdout = stdout or subprocess.PIPE
         stderr = stderr or subprocess.PIPE
@@ -66,6 +67,7 @@ class pype():
             stdout, stderr = proc.communicate()
         if raise_errors is None:
             raise_errors = True
+        # print("ProcDebug:", raise_errors, proc.returncode)
         if raise_errors and proc.returncode:
             exc_kwargs = dict(stdout=stdout, stderr=stderr,
                               shell=shell, srcs=script)
@@ -137,9 +139,10 @@ class ScriptException(ScriptRun, Exception):
         # For debugging
         with NamedTemporaryFile(mode="w", delete=False) as f:
             f.write(ScriptRunI["srcs"])
-            trace = ScriptRunI["stderr"].decode(
-                'UTF-8').replace("<string>", f.name)
-            message = f"Error running {ScriptRunI['shell']} script:\n{trace}"
+            trace = ScriptRunI["stderr"].decode("UTF-8")
+            trace = trace.replace("<string>", f.name)
+            message = f"Error running {ScriptRunI['shell']} script {f.name} Trace:\n\t{trace}".strip()
+            self.message = message
             super(Exception, self).__init__(message)
 
     def __repr__(self):
