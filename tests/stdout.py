@@ -1,7 +1,6 @@
 #!/usr/bin/python
 import os
 print("####BEGIN TEST", os.environ.get("PYSH_ROOT", None), os.environ.get("PYSH_RUNNING", None), os.environ.get("PYSH_BLOCK", None))
-
 from pysh import Pysh
 source_file = __file__
 pysher = Pysh(source_file)

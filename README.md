@@ -7,8 +7,10 @@ Also can capture stdout into a python variable and use shells beyond bash.
 This is done by processing the source with regex and a basic subprocess wrapper using shell command strings.
 
 ### Installation
+From PyPI:
+`pip3 install pyshpype`
 
-Install to local folder:
+Git to local folder:
 `pip3 install -e "git+https://github.com/blipk/pysh.git#egg=pysh"`
 
 ### Examples

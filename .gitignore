@@ -1,7 +1,7 @@
 __pycache__
 dist/
 *.egg-info/
-
+.pypirc
 
 scratch.md
 blocks.dat

@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pysh"
+name = "pyshpype"
 version = "0.1.0"
 description = "Run shell in python"
 authors = [
@@ -11,7 +11,7 @@ documentation = "https://github.com/blipk/pysh"
 license = "MIT"
 
 # README file(s) are used as the package description
-readme = ["README.md"] #, "LICENSE"
+readme = "README.md" #, "LICENSE"
 keywords = ["pysh", "shell", "bash"] # Keywords (translated to tags on the package index)
 classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules"
