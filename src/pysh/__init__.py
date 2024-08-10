@@ -1,7 +1,4 @@
 #!/usr/bin/python
-from os.path import realpath
-from inspect import stack
-from pysh import pype
 import os
 import re
 import sys
@@ -9,6 +6,7 @@ import uuid
 import shlex
 import msgpack
 from pathlib import Path
+from inspect import stack
 from ast import literal_eval
 
 from pysh.pype import pype, ScriptException, ScriptRun, default_pipe
@@ -442,7 +440,7 @@ if os.environ.get("PYSH_ROOT", None) != "1":
 
     # Function wrapper to run on call source
     def x():
-        return realpath(stack()[-1].filename)
+        return os.path.realpath(stack()[-1].filename)
     pysher = Pysh(x(), init=False)
     pysh = pysher.pysh
 else:
